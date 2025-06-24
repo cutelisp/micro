@@ -33,8 +33,10 @@ var commands map[string]Command
 func InitCommands() {
 	commands = map[string]Command{
 		"set":        {(*BufPane).SetCmd, OptionValueComplete},
-		"reset":      {(*BufPane).ResetCmd, OptionValueComplete},
 		"setlocal":   {(*BufPane).SetLocalCmd, OptionValueComplete},
+		"toggle":     {(*BufPane).ToggleCmd, OptionValueComplete},
+		"togglelocal":{(*BufPane).ToggleLocalCmd, OptionValueComplete},
+		"reset":      {(*BufPane).ResetCmd, OptionValueComplete},
 		"show":       {(*BufPane).ShowCmd, OptionComplete},
 		"showkey":    {(*BufPane).ShowKeyCmd, nil},
 		"run":        {(*BufPane).RunCmd, nil},
@@ -725,6 +727,63 @@ func (h *BufPane) SetLocalCmd(args []string) {
 	value := args[1]
 
 	err := h.Buf.SetOption(option, value)
+	if err != nil {
+		InfoBar.Error(err)
+	}
+}
+
+// ToggleCmd toggles an option
+func (h *BufPane) ToggleCmd(args []string) {
+	if len(args) < 1 {
+		InfoBar.Error("Please provide an option to toggle")
+		return
+	}
+	
+	option := args[0]
+	curVal := config.GetGlobalOption(option)
+	if curVal == nil {
+		InfoBar.Error(config.ErrInvalidOption)
+		return
+	}
+	
+	optionKind := reflect.TypeOf(curVal).Kind()
+	if optionKind != reflect.Bool {
+		InfoBar.Error("Non-boolean option")
+		return
+	}
+	
+	newVal := strconv.FormatBool(!curVal.(bool))
+	err := SetGlobalOption(option, newVal)
+	if err == config.ErrInvalidOption {
+		err := h.Buf.SetOption(option, newVal)
+		if err != nil {
+			InfoBar.Error(err)
+		}
+	}
+}
+
+// ToggleLocalCmd toggles an option local to the buffer
+func (h *BufPane) ToggleLocalCmd(args []string) {
+	if len(args) < 1 {
+		InfoBar.Error("Not enough arguments")
+		return
+	}
+	
+	option := args[0]
+	curVal := h.Buf.Settings[option]
+	if curVal == nil {
+		InfoBar.Error(config.ErrInvalidOption)
+		return
+	}
+	
+	optionKind := reflect.TypeOf(curVal).Kind()
+	if optionKind != reflect.Bool {
+		InfoBar.Error("Non-boolean option")
+		return
+	}
+
+	newVal := strconv.FormatBool(!curVal.(bool))
+	err := h.Buf.SetOption(option, newVal)
 	if err != nil {
 		InfoBar.Error(err)
 	}
