@@ -13,6 +13,7 @@ import (
 	"github.com/zyedidia/micro/v2/internal/display"
 	ulua "github.com/zyedidia/micro/v2/internal/lua"
 	"github.com/zyedidia/micro/v2/internal/screen"
+
 	"github.com/zyedidia/micro/v2/internal/shell"
 	"github.com/zyedidia/micro/v2/internal/util"
 )
@@ -42,6 +43,7 @@ func LuaImport(pkg string) *lua.LTable {
 
 func luaImportMicro() *lua.LTable {
 	pkg := ulua.L.NewTable()
+	ulua.L.SetField(pkg, "exit", luar.New(ulua.L, exit))
 
 	ulua.L.SetField(pkg, "TermMessage", luar.New(ulua.L, screen.TermMessage))
 	ulua.L.SetField(pkg, "TermError", luar.New(ulua.L, screen.TermError))
