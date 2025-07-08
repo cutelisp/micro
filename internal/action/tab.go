@@ -9,6 +9,7 @@ import (
 	"github.com/zyedidia/micro/v2/internal/display"
 	ulua "github.com/zyedidia/micro/v2/internal/lua"
 	"github.com/zyedidia/micro/v2/internal/screen"
+	"github.com/zyedidia/micro/v2/internal/util"
 	"github.com/zyedidia/micro/v2/internal/views"
 )
 
@@ -17,6 +18,11 @@ import (
 type TabList struct {
 	*display.TabWindow
 	List []*Tab
+
+	// captures whether the mouse is released
+	release bool
+	// captures whether the mouse is released
+	dragging bool
 }
 
 // NewTabList creates a TabList from a list of buffers by creating a Tab
@@ -35,6 +41,7 @@ func NewTabList(bufs []*buffer.Buffer) *TabList {
 	}
 	tl.TabWindow = display.NewTabWindow(w, 0)
 	tl.Names = make([]string, len(bufs))
+	tl.release = true
 
 	return tl
 }
@@ -107,20 +114,45 @@ func (t *TabList) HandleEvent(event tcell.Event) {
 		mx, my := e.Position()
 		switch e.Buttons() {
 		case tcell.Button1:
+			wasReleased := t.release
+			t.release = false
+			if !wasReleased && !t.dragging {
+				//Non-tabbar dragging
+				break
+			}
 			if my == t.Y && len(t.List) > 1 {
 				if mx == 0 {
 					t.Scroll(-4)
 				} else if mx == t.Width-1 {
 					t.Scroll(4)
 				} else {
-					ind := t.LocFromVisual(buffer.Loc{mx, my})
-					if ind != -1 {
-						t.SetActive(ind)
+					i := t.LocFromVisual(buffer.Loc{mx, my})
+
+					if i == -1 {
+						if t.dragging {
+							i = len(t.List) - 1
+						} else {
+							//Non-tab click/drag
+							return
+						}
+					}
+					if t.dragging {
+						Tabs.MoveTab(MainTab(), i)
+						Tabs.SetActive(i)
+					} else {
+						t.dragging = true
+						t.SetActive(i)
 					}
 				}
 				return
 			}
+			if wasReleased {
+				t.dragging = false
+			}
 		case tcell.ButtonNone:
+			t.release = true
+			t.dragging = false
+
 			if t.List[t.Active()].release {
 				// Mouse release received, while already released
 				t.ResetMouse()
@@ -138,7 +170,9 @@ func (t *TabList) HandleEvent(event tcell.Event) {
 			}
 		}
 	}
-	t.List[t.Active()].HandleEvent(event)
+	if !t.dragging {
+		t.List[t.Active()].HandleEvent(event)
+	}
 }
 
 // Display updates the names and then displays the tab bar
@@ -150,6 +184,7 @@ func (t *TabList) Display() {
 }
 
 func (t *TabList) SetActive(a int) {
+	a = util.Clamp(a, 0, len(t.List)-1)
 	t.TabWindow.SetActive(a)
 
 	for i, p := range t.List {
@@ -398,4 +433,15 @@ func (t *Tab) CurPane() *BufPane {
 		return nil
 	}
 	return p
+}
+
+// MoveTab moves the specified tab to the given index
+func (tl *TabList) MoveTab(t *Tab, i int) {
+	i = util.Clamp(i, 0, len(tl.List)-1)
+	tl.RemoveTab(t.Panes[0].ID())
+	tl.List = append(tl.List, nil)
+	copy(tl.List[i+1:], tl.List[i:])
+	tl.List[i] = t
+	tl.Resize()
+	tl.UpdateNames()
 }
